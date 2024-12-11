@@ -1,0 +1,160 @@
+Creating an auto-trail or step-by-step guide for integrating Prebid.js with Seedtag on a WordPress website involves explaining the whole process clearly. Below, I’ve broken down your approach into detailed steps, providing an explanation for each part. The goal is to make this guide informative for someone trying to replicate what you've done:
+
+### **Prebid.js and Seedtag Integration Guide for WordPress**
+
+#### **Step 1: Understanding the Components**
+
+Before diving into the code, let's review what each component does:
+
+- **Prebid.js**: This is a popular open-source header bidding solution. It enables publishers to run multiple demand sources (like Seedtag) through an auction system, improving ad revenue.
+- **Seedtag**: This is a demand-side platform (DSP) that allows you to serve ads through Prebid.js.
+- **AdUnit**: This represents different ad slots or placements on your webpage, like banner ads, video ads, etc.
+- **Publisher ID & Ad Unit ID**: These are unique identifiers that Seedtag provides, which link to specific ad placements in their system.
+
+#### **Step 2: Download and Include Prebid.js**
+
+Since the CDN for Prebid.js was blocked, you took the approach of downloading the script and uploading it to your WordPress child theme.
+
+1. **Download Prebid.js**:
+   - Go to the [Prebid.js GitHub repository](https://github.com/prebid/Prebid.js).
+   - Download the latest version of the Prebid.js file (usually a `.js` file).
+   
+2. **Upload to WordPress**:
+   - In your WordPress installation, go to your child theme directory.
+   - Create a `js` folder if it doesn’t already exist.
+   - Upload the downloaded `prebid.js` file into this folder.
+
+3. **Enqueue the Script**:
+   You’ve correctly used the `wp_enqueue_script` function to add the Prebid.js script to your WordPress site. Here’s the code you used:
+
+```php
+function add_prebid_js() {
+    wp_enqueue_script('prebid-js', get_stylesheet_directory_uri() . '/js/prebid.js', array(), null, true);
+}
+add_action('wp_enqueue_scripts', 'add_prebid_js');
+```
+This function tells WordPress to include your downloaded Prebid.js file, ensuring it loads in the footer (`true` argument) of the page.
+
+#### **Step 3: Setting Up Ad Units**
+
+You’ve defined multiple ad units in the `adUnits` array, each representing a different type of ad (e.g., in-screen, in-article, in-banner, and in-stream). Let's break down each ad unit configuration:
+
+1. **InScreen Ad Unit**:
+   - **Code**: The `code` refers to the ad container's ID on your page (you will need an HTML element with the same ID).
+   - **Sizes**: This is the size of the ad. For example, `[[320, 100]]` means a 320px by 100px banner.
+   - **Bids**: This defines the bidders, and here you’ve used Seedtag with `publisherId` and `adUnitId`.
+
+   Example for one ad unit:
+   ```js
+   {
+      code: 'inScreen', // The container ID on the page
+      mediaTypes: {
+        banner: {
+          sizes: [[320, 100]] // Size of the banner
+        }
+      },
+      bids: [
+        {
+          bidder: 'seedtag', // The bidder's name (Seedtag)
+          params: {
+            publisherId: '5999-0158-01',  // Seedtag Publisher ID
+            adUnitId: '34727025',         // Seedtag Ad Unit ID
+            placement: 'inScreen'         // Placement type
+          }
+        }
+      ]
+    }
+   ```
+
+   Repeat this for the other ad units (`inArticle`, `inBanner`, and `inStream`).
+
+#### **Step 4: Prebid.js Configuration**
+
+Once the ad units are defined, you initialize Prebid.js and configure it using the `pbjs` object. This involves setting various Prebid.js configurations, like enabling all bids and randomizing the bidder sequence.
+
+Here’s your setup:
+```js
+var pbjs = pbjs || {};
+pbjs.que = pbjs.que || [];
+
+pbjs.que.push(function () {
+    pbjs.setConfig({
+        enableSendAllBids: true,  // Ensure all bids are sent, even if one fails
+        bidderSequence: 'random', // Randomize the bidding order
+        enableTIDs: true          // Enable Transaction IDs
+    });
+
+    pbjs.addAdUnits(adUnits);  // Add all ad units defined above
+
+    pbjs.setConfig({
+        timeout: 2000, // Timeout for bid requests
+        debug: true    // Enable debug mode for troubleshooting
+    });
+
+    pbjs.requestBids({
+        bidsBackHandler: function () {
+            const winningBids = pbjs.getHighestCpmBids();  // Get the highest CPM bids
+            winningBids.forEach(function (bid) {
+                const adContainer = document.getElementById(bid.adUnitCode);  // Find the ad container
+                if (adContainer) {
+                    adContainer.innerHTML = bid.ad;  // Inject the ad HTML into the container
+                }
+            });
+        }
+    });
+});
+```
+
+This script ensures that:
+- All bids are sent.
+- Bids are requested with a 2-second timeout.
+- The highest CPM bid is injected into the correct ad container.
+
+#### **Step 5: Integrating Seedtag Script for Ad Serving**
+
+Seedtag requires its own ad-serving script to render the ads. You've included this at the end of your integration:
+
+```js
+(function() {
+    var script = document.createElement('script');
+    script.src = "https://t.seedtag.com/t/5999-0158-01.js";  // Seedtag's ad-serving script
+    script.async = true;  // Load the script asynchronously
+    document.head.appendChild(script);  // Append the script to the page
+})();
+```
+
+This dynamically loads the Seedtag script which is necessary to render the actual ads from Seedtag once Prebid.js has completed the auction.
+
+#### **Step 6: Adding Ad Containers to Your HTML**
+
+For each ad unit, you need a container in the HTML where the ad will be injected. For example, add these containers in your WordPress theme (probably in the theme's template files or directly in the post/page content):
+
+```html
+<div id="inScreen"></div>  <!-- In-Screen ad container -->
+<div id="inArticle"></div> <!-- In-Article ad container -->
+<div id="inBanner"></div>  <!-- In-Banner ad container -->
+<div id="inStream"></div>  <!-- In-Stream ad container -->
+```
+
+Each `id` matches the `code` defined in the Prebid.js configuration.
+
+#### **Step 7: Debugging and Testing**
+
+Once everything is set up:
+1. **Enable Debugging**: As you’ve already enabled `debug: true`, check the console for any errors or issues related to bids and ad serving.
+2. **Test the Bids**: Use the browser developer tools to check if the bids are being sent, the highest CPM is being selected, and the ad is being injected into the container.
+3. **Cross-check the Ad Container IDs**: Ensure the IDs of your HTML containers match those defined in your `adUnits` array.
+
+#### **Step 8: Finalizing and Deploying**
+
+After confirming everything works in your local or staging environment, deploy the changes to your live WordPress site.
+
+### **Conclusion**
+
+By following the steps outlined above, you've successfully integrated Prebid.js with Seedtag on your WordPress site. This guide ensures that anyone who follows it will understand:
+- How to manually upload and use Prebid.js when CDN access is blocked.
+- How to define and configure multiple ad units.
+- How to integrate the Seedtag ad-serving script.
+- How to test and troubleshoot the integration.
+
+This method ensures you can run header bidding auctions and serve ads effectively through Prebid.js and Seedtag.
